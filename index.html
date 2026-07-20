@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KURAMA 成績ビューア</title>
+<meta property="og:title" content="KURAMA 成績ビューア｜無料のMT4/MT5成績分析ツール">
+<meta property="og:description" content="MT4/MT5の口座履歴レポートをドラッグするだけで、収支カーブ・勝率・PF・ドローダウンなど8種のグラフで成績を分析。データは完全ローカル処理、外部送信なし。KURAMA公式無料ツール。">
+<meta property="og:type" content="website">
+<meta name="description" content="MT4/MT5の口座履歴を8種のグラフで可視化する無料成績分析ツール。KURAMA公式。">
+<meta name="theme-color" content="#e8b64c">
+<style>
+:root{
+  --bg:#07070a; --panel:#101016; --panel2:#15151d; --line:#26262e;
+  --gold:#e8b64c; --gold-dim:#9a7a2e; --gold-glow:rgba(232,182,76,.45);
+  --win:#22dd88; --win-glow:rgba(34,221,136,.5);
+  --loss:#ff5566; --loss-glow:rgba(255,85,102,.5);
+  --cyan:#33ccee; --txt:#e8e6df; --muted:#8a8894;
+  --num:"Consolas","Roboto Mono","Courier New",monospace;
+  --jp:"Yu Gothic UI","Yu Gothic","Hiragino Sans","Meiryo",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:var(--jp);min-height:100vh;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(232,182,76,.07),transparent)}
+.wrap{max-width:1560px;margin:0 auto;padding:20px 20px 60px}
+
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  border-bottom:2px solid var(--gold-dim);padding:10px 2px 12px;margin-bottom:18px}
+.brand{font-family:var(--num);font-size:26px;font-weight:700;letter-spacing:.12em;color:var(--gold);
+  text-shadow:0 0 18px var(--gold-glow)}
+.brand small{font-size:13px;letter-spacing:.3em;color:var(--muted);text-shadow:none;margin-left:8px}
+.privacy{margin-left:auto;font-size:11px;color:var(--muted)}
+.privacy b{color:var(--cyan)}
+
+/* ===== ドロップゾーン ===== */
+#drop{border:2px dashed var(--gold-dim);border-radius:12px;background:var(--panel);
+  padding:44px 20px;text-align:center;cursor:pointer;transition:.2s}
+#drop.over{border-color:var(--gold);background:#1a1a10;box-shadow:0 0 30px var(--gold-glow) inset}
+#drop h2{font-size:18px;color:var(--gold);margin-bottom:10px;letter-spacing:.05em}
+#drop p{font-size:13px;color:var(--muted);line-height:1.9}
+#drop .formats{display:inline-flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center}
+#drop .fmt{font-family:var(--num);font-size:11px;border:1px solid var(--line);border-radius:4px;
+  padding:3px 10px;color:var(--cyan)}
+.btnrow{margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+button{font-family:var(--jp);font-size:13px;background:var(--panel2);color:var(--txt);
+  border:1px solid var(--gold-dim);border-radius:6px;padding:9px 18px;cursor:pointer;transition:.15s}
+button:hover{border-color:var(--gold);box-shadow:0 0 14px var(--gold-glow)}
+button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button.primary{background:linear-gradient(180deg,#3a2f12,#26200e);color:var(--gold);font-weight:700}
+#err{display:none;margin-top:14px;color:var(--loss);font-size:13px;line-height:1.8;
+  border:1px solid var(--loss);border-radius:8px;padding:10px 14px;background:rgba(255,85,102,.07)}
+.howto{margin-top:22px;text-align:left;max-width:560px;margin-left:auto;margin-right:auto;cursor:default}
+.howto summary{font-size:13px;color:var(--cyan);cursor:pointer;text-align:center;letter-spacing:.05em}
+.howto summary:hover{text-shadow:0 0 10px rgba(51,204,238,.5)}
+.howto .steps{margin-top:12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  padding:16px 20px;font-size:13px;line-height:2;color:var(--txt)}
+.howto .steps p{margin:8px 0 4px}
+.howto .steps b{color:var(--gold)}
+.howto .steps ol{padding-left:22px;color:#c9c7c0}
+
+/* ===== フィルタバー ===== */
+#bar{display:none;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0;position:sticky;top:0;
+  background:rgba(7,7,10,.92);backdrop-filter:blur(6px);padding:10px 4px;z-index:5;
+  border-bottom:1px solid var(--line)}
+#bar label{font-size:12px;color:var(--muted)}
+select{font-family:var(--jp);font-size:13px;background:var(--panel2);color:var(--txt);
+  border:1px solid var(--line);border-radius:6px;padding:7px 10px;color-scheme:dark}
+#bar .right{margin-left:auto;display:flex;gap:8px}
+
+/* ===== KPI ===== */
+#dash{display:none}
+.top{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:14px}
+@media(min-width:1150px){.top{grid-template-columns:minmax(380px,1.2fr) 2fr}.top .kpis{margin-bottom:0}}
+.hero{background:linear-gradient(160deg,#16130a,#0b0b10);border:1px solid var(--gold-dim);
+  border-radius:12px;padding:22px 26px;position:relative;overflow:hidden;display:flex;
+  flex-direction:column;justify-content:center}
+.hero .lbl{font-size:12px;color:var(--muted);letter-spacing:.15em}
+.hero .val{font-family:var(--num);font-size:56px;font-weight:700;line-height:1.15;letter-spacing:.02em}
+.hero .sub{font-family:var(--num);font-size:12px;color:var(--muted);margin-top:4px}
+.hero canvas{position:absolute;right:0;bottom:0;width:52%;height:100%;opacity:.5;pointer-events:none}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+@media(min-width:1150px){.kpis{grid-template-columns:repeat(3,1fr)}}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+.kpi .lbl{font-size:11px;color:var(--muted);letter-spacing:.08em;margin-bottom:6px}
+.kpi .val{font-family:var(--num);font-size:24px;font-weight:700;line-height:1.1}
+.kpi .sub{font-family:var(--num);font-size:11px;color:var(--muted);margin-top:5px}
+.pos{color:var(--win)} .neg{color:var(--loss)} .gold{color:var(--gold)} .cy{color:var(--cyan)}
+
+/* ===== カード/グリッド ===== */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:16px;margin-bottom:14px}
+.card h3{font-size:13px;color:var(--gold);letter-spacing:.15em;
+  border-left:3px solid var(--gold);padding-left:10px}
+.card .hint{font-size:11px;color:var(--muted);margin:6px 0 12px;padding-left:13px;line-height:1.7}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-bottom:14px}
+canvas.chart{width:100%;display:block;cursor:crosshair}
+
+/* ===== BUY/SELL対比 ===== */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+.side{border-radius:10px;padding:14px 16px;border:1px solid var(--line)}
+.side.buy{background:linear-gradient(180deg,rgba(51,204,238,.08),transparent)}
+.side.sell{background:linear-gradient(180deg,rgba(255,85,102,.08),transparent)}
+.side .t{font-family:var(--num);font-size:13px;font-weight:700;letter-spacing:.2em;margin-bottom:8px}
+.side .n{font-family:var(--num);font-size:26px;font-weight:700}
+.side .d{font-family:var(--num);font-size:11px;color:var(--muted);margin-top:4px;line-height:1.8}
+
+/* ===== テーブル ===== */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:11px;color:var(--muted);text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);
+  letter-spacing:.08em;font-weight:600}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--num);text-align:right;padding:8px 10px;border-bottom:1px solid #1a1a22}
+tr:hover td{background:#16161e}
+
+/* ===== ツールチップ ===== */
+#tip{position:fixed;display:none;pointer-events:none;z-index:20;background:#1b1b24;color:var(--txt);
+  border:1px solid var(--gold-dim);border-radius:6px;padding:7px 11px;font-family:var(--num);
+  font-size:12px;line-height:1.7;box-shadow:0 4px 18px rgba(0,0,0,.6);white-space:nowrap}
+#tip b{color:var(--gold)}
+
+footer{margin-top:30px;border-top:1px solid var(--line);padding-top:16px;
+  font-size:11px;color:var(--muted);line-height:2}
+footer .series{color:var(--gold-dim);font-family:var(--num);letter-spacing:.05em}
+
+@media (max-width:720px){
+  .grid2,.vs{grid-template-columns:1fr}
+  .hero .val{font-size:38px}
+  .hero canvas{display:none}
+  .brand{font-size:20px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .hero .val{animation:pulse 3s ease-in-out infinite}
+  @keyframes pulse{0%,100%{text-shadow:0 0 14px currentColor}50%{text-shadow:0 0 32px currentColor}}
+  .card{animation:rise .5s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">KURAMA<small>PERFORMANCE VIEWER</small></div>
+  <div class="privacy"><b>ローカル完結</b>：データはこのファイル内でのみ処理され、外部送信は一切ありません</div>
+</header>
+
+<div id="drop" tabindex="0" role="button" aria-label="レポートファイルを選択">
+  <h2>取引レポートをここにドラッグ＆ドロップ</h2>
+  <p>MT4／MT5の口座履歴レポート、またはKURAMAシリーズEAの取引CSVに対応。<br>
+  クリックしてファイル選択もできます。</p>
+  <div class="formats">
+    <span class="fmt">MT5 レポート (.html)</span>
+    <span class="fmt">MT4 詳細レポート (.html/.htm)</span>
+    <span class="fmt">KURAMA EA 取引CSV (.csv)</span>
+    <span class="fmt">MT5 Open XML (.xlsx) *要オンライン</span>
+  </div>
+  <div class="btnrow">
+    <button class="primary" id="pick">ファイルを選ぶ</button>
+    <button id="demo">サンプルデータで試す</button>
+  </div>
+  <div id="err"></div>
+  <input type="file" id="file" accept=".html,.htm,.csv,.xlsx" hidden>
+
+  <details class="howto" onclick="event.stopPropagation()">
+    <summary>▼ レポートの出し方（MT5 / MT4）</summary>
+    <div class="steps">
+      <p><b>MT5の場合</b></p>
+      <ol>
+        <li>MT5下部の「ツールボックス」を開く（表示されていない場合は Ctrl+T）</li>
+        <li>「口座履歴」タブをクリック</li>
+        <li>表の上で右クリック →「期間」→「全履歴」を選ぶ</li>
+        <li>もう一度右クリック →「レポート」→ <b>HTML</b> 形式で保存</li>
+        <li>保存されたファイルを、この画面にドラッグ＆ドロップ</li>
+      </ol>
+      <p><b>MT4の場合</b></p>
+      <ol>
+        <li>ターミナル（Ctrl+T）の「口座履歴」タブを開く</li>
+        <li>表の上で右クリック →「期間のカスタム設定」で全期間にする</li>
+        <li>右クリック →「<b>レポートの保存（詳細）</b>」でHTML保存</li>
+        <li>保存されたファイルを、この画面にドラッグ＆ドロップ</li>
+      </ol>
+      <p><b>KURAMAシリーズEAをお使いの場合</b>：MT5の「ファイル」→「データフォルダを開く」→ MQL5 → Files 内にある取引CSV（例：KGA_EA_○○○.csv）をそのまま読み込むこともできます。</p>
+      <p>うまく読み込めない場合は、レポートの形式（HTML）と期間設定をご確認ください。</p>
+    </div>
+  </details>
+</div>
+
+<div id="bar">
+  <label>銘柄 <select id="fSym"><option value="">すべて</option></select></label>
+  <label>期間 <select id="fRange">
+    <option value="all">全期間</option>
+    <option value="ytd">今年</option>
+    <option value="6m">直近6ヶ月</option>
+    <option value="3m">直近3ヶ月</option>
+    <option value="1m">直近1ヶ月</option>
+  </select></label>
+  <label>方向 <select id="fDir">
+    <option value="">両方</option><option value="1">BUYのみ</option><option value="-1">SELLのみ</option>
+  </select></label>
+  <div class="right"><button id="reset">別のファイルを読む</button></div>
+</div>
+
+<div id="dash">
+
+  <div class="top">
+  <div class="hero">
+    <div class="lbl">純損益（口座通貨建て）</div>
+    <div class="val" id="kNet">-</div>
+    <div class="sub" id="kPeriod">-</div>
+    <canvas id="cSpark"></canvas>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">勝率</div><div class="val gold" id="kWr">-</div><div class="sub" id="kWl">-</div></div>
+    <div class="kpi"><div class="lbl">プロフィットファクター</div><div class="val gold" id="kPf">-</div><div class="sub">総利益÷総損失。1.0超で利益体質</div></div>
+    <div class="kpi"><div class="lbl">最大ドローダウン</div><div class="val neg" id="kDd">-</div><div class="sub">確定損益の累積ピークからの最大下落幅</div></div>
+    <div class="kpi"><div class="lbl">取引数</div><div class="val" id="kN">-</div><div class="sub" id="kAvg">-</div></div>
+    <div class="kpi"><div class="lbl">期待値 / 1取引</div><div class="val cy" id="kEv">-</div><div class="sub">純損益÷取引数</div></div>
+    <div class="kpi"><div class="lbl">最大連勝 / 連敗</div><div class="val" id="kStreak">-</div><div class="sub" id="kBig">-</div></div>
+  </div>
+  </div>
+
+  <div class="card">
+    <h3>累積損益カーブ</h3>
+    <div class="hint">左から右へ、決済のたびに損益を積み上げた軌跡。金色の線が右肩上がりなら資産が積み上がっています。赤い網掛けは「直近ピークからの下落（ドローダウン）」区間。カーソルを乗せると日付と金額が出ます。</div>
+    <canvas id="cCurve" class="chart" height="320"></canvas>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>月別損益</h3>
+      <div class="hint">月ごとの合計。緑の月が多いほど安定して積めています。</div>
+      <canvas id="cMonth" class="chart" height="230"></canvas>
+    </div>
+    <div class="card">
+      <h3>曜日別損益</h3>
+      <div class="hint">決済した曜日ベースの合計。特定の曜日に負けが偏っていないかが分かります。</div>
+      <canvas id="cWday" class="chart" height="230"></canvas>
+    </div>
+    <div class="card">
+      <h3>時間帯別損益</h3>
+      <div class="hint">エントリー時刻（レポート記載の時刻基準）ごとの合計。どの時間帯が稼ぎ頭かが分かります。</div>
+      <canvas id="cHour" class="chart" height="230"></canvas>
+    </div>
+    <div class="card">
+      <h3>1取引あたりの損益分布</h3>
+      <div class="hint">横軸が1取引の損益、縦軸が回数。右側（緑）に山があれば勝ちが太く、左端に大きな棒があるなら大負けに注意。</div>
+      <canvas id="cHist" class="chart" height="230"></canvas>
+    </div>
+    <div class="card">
+      <h3>BUY / SELL 別</h3>
+      <div class="hint">方向ごとの成績。どちらかに偏って負けている場合、相場つき（トレンド方向）との相性が見えます。</div>
+      <div class="vs">
+        <div class="side buy"><div class="t" style="color:var(--cyan)">▲ BUY</div><div class="n" id="vBuyNet">-</div><div class="d" id="vBuyD">-</div></div>
+        <div class="side sell"><div class="t" style="color:var(--loss)">▼ SELL</div><div class="n" id="vSellNet">-</div><div class="d" id="vSellD">-</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>保有時間別損益</h3>
+      <div class="hint">ポジションを持っていた長さ別の合計。短期と長期どちらで取れているかが分かります。</div>
+      <canvas id="cDur" class="chart" height="230"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>銘柄別サマリー</h3>
+    <div class="hint">複数銘柄で運用している場合の内訳。上のフィルタで銘柄を絞ると全グラフが切り替わります。</div>
+    <table><thead><tr><th>銘柄</th><th>取引数</th><th>勝率</th><th>PF</th><th>平均RR</th><th>純損益</th></tr></thead>
+    <tbody id="tSym"></tbody></table>
+  </div>
+
+</div>
+
+<div id="tip"></div>
+
+<footer>
+  <div class="series">KURAMA SERIES ─ GOLD SIGNAL / GOLD SWING AUTO / GOLD SCALP AUTO / USDJPY SIGNAL / USDJPY SWING</div>
+  <div>本ツールはKURAMAシリーズ購入者向けの無料配布ツールです。表示される数値はお手元のレポートに基づく参考値であり、
+  過去の成績は将来の成果を保証するものではありません。投資判断はご自身の責任でお願いいたします。</div>
+</footer>
+
+</div>
+<script>
+"use strict";
+/* ================= 状態 ================= */
+let ALL=[];   // {open,close,sym,dir,lot,net}
+let VIEW=[];
+
+/* ================= ユーティリティ ================= */
+const $=id=>document.getElementById(id);
+const fmt=(v,d=0)=>{const s=Math.abs(v).toLocaleString('ja-JP',{minimumFractionDigits:d,maximumFractionDigits:d});return (v<0?'-':'')+s;};
+const signed=(v,d=0)=>(v>0?'+':'')+fmt(v,d);
+const isNum=s=>{if(s==null)return false;const t=String(s).replace(/[\s,\u00a0]/g,'');return t!==''&&/^-?\d+(\.\d+)?$/.test(t);};
+const toNum=s=>parseFloat(String(s).replace(/[\s,\u00a0]/g,''))||0;
+const DATE_RE=/(\d{4})[.\/-](\d{1,2})[.\/-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/;
+function toDate(s){const m=DATE_RE.exec(String(s));if(!m)return null;
+  return new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0));}
+function showErr(msg){const e=$('err');e.style.display='block';e.textContent=msg;}
+function clearErr(){$('err').style.display='none';}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* 数字カウントアップ演出 */
+function countUp(el,target,formatter,cls){
+  if(cls!==undefined)el.className=cls;
+  if(reduceMotion){el.textContent=formatter(target);return;}
+  const t0=performance.now(),dur=700;
+  const step=t=>{
+    const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);
+    el.textContent=formatter(target*e);
+    if(p<1)requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ================= パーサー: KURAMA CSV ================= */
+function parseKuramaCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()!=='');
+  if(lines.length<2)return null;
+  const head=lines[0].split(',').map(h=>h.trim().toLowerCase());
+  const idx=re=>head.findIndex(h=>re.test(h));
+  const iOpen=idx(/open.*time|opentime/), iClose=idx(/close.*time|closetime/),
+        iSym=idx(/symbol/), iDir=idx(/^dir|direction/), iLot=idx(/^lot|volume/),
+        iNet=idx(/netpnl|net_pnl|netprofit/), iP=idx(/^profit$/), iSw=idx(/^swap$/), iCm=idx(/comm/);
+  if(iOpen<0||iClose<0||(iNet<0&&iP<0))return null;
+  const out=[];
+  for(let i=1;i<lines.length;i++){
+    const c=lines[i].split(',');
+    const open=toDate(c[iOpen]), close=toDate(c[iClose]);
+    if(!open||!close)continue;
+    let net;
+    if(iNet>=0&&isNum(c[iNet]))net=toNum(c[iNet]);
+    else net=(iP>=0?toNum(c[iP]):0)+(iSw>=0?toNum(c[iSw]):0)+(iCm>=0?toNum(c[iCm]):0);
+    const dirS=iDir>=0?String(c[iDir]).toUpperCase():'';
+    out.push({open,close,sym:iSym>=0?c[iSym].trim():'-',
+      dir:dirS.includes('BUY')?1:(dirS.includes('SELL')?-1:0),
+      lot:iLot>=0?toNum(c[iLot]):0, net});
+  }
+  return out.length?out:null;
+}
+
+/* ================= パーサー: MT4/MT5 HTMLレポート =================
+   全<tr>を走査し「日付セル2つ + buy/sell種別」を持つ行=クローズ済みポジションとみなす。
+   2つ目の日付セルの次=クローズ価格。それ以降の数値セル合計=純損益。 */
+function rowToTrade(cells){
+  if(cells.length<8)return null;
+  const dateIdx=[];
+  cells.forEach((c,i)=>{if(DATE_RE.test(c))dateIdx.push(i);});
+  if(dateIdx.length<2)return null;
+  const typeIdx=cells.findIndex(c=>/^(buy|sell|買い|売り)$/i.test(c));
+  if(typeIdx<0)return null;
+  const open=toDate(cells[dateIdx[0]]),close=toDate(cells[dateIdx[1]]);
+  if(!open||!close||close<open)return null;
+  let sym='-';
+  for(const i of [typeIdx-1,typeIdx+1,typeIdx-2,typeIdx+2]){
+    if(i>=0&&i<cells.length&&/^[A-Za-z][A-Za-z0-9#._-]{2,14}$/.test(cells[i])){sym=cells[i];break;}
+  }
+  let lot=0;
+  for(let i=typeIdx+1;i<Math.min(typeIdx+3,cells.length);i++){
+    if(isNum(cells[i])){lot=toNum(cells[i]);break;}
+  }
+  let net=0,found=false;
+  for(let i=dateIdx[1]+2;i<cells.length;i++){
+    if(isNum(cells[i])){net+=toNum(cells[i]);found=true;}
+  }
+  if(!found)return null;
+  return {open,close,sym,dir:/^b|買/i.test(cells[typeIdx])?1:-1,lot,net};
+}
+function parseMTReport(html){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const out=[];
+  doc.querySelectorAll('tr').forEach(tr=>{
+    const t=rowToTrade([...tr.cells].map(td=>td.textContent.trim()));
+    if(t)out.push(t);
+  });
+  return out.length?out:null;
+}
+
+/* ================= パーサー: XLSX (SheetJSをオンデマンド読込) ================= */
+function parseXLSX(buf){
+  return new Promise((resolve,reject)=>{
+    const go=()=>{try{
+      const wb=XLSX.read(buf,{type:'array'});
+      const out=[];
+      wb.SheetNames.forEach(n=>{
+        XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:false}).forEach(r=>{
+          const t=rowToTrade((r||[]).map(c=>String(c==null?'':c).trim()));
+          if(t)out.push(t);
+        });
+      });
+      out.length?resolve(out):reject(new Error('取引行が見つかりませんでした'));
+    }catch(e){reject(e);}};
+    if(window.XLSX)return go();
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=go;
+    s.onerror=()=>reject(new Error('xlsx読込ライブラリを取得できませんでした（オフライン？）。MT5で「HTML」形式のレポートを保存してお試しください。'));
+    document.head.appendChild(s);
+  });
+}
+
+/* ================= ファイル受付 ================= */
+async function handleFile(f){
+  clearErr();
+  try{
+    let trades=null;
+    if(/\.csv$/i.test(f.name)){
+      trades=parseKuramaCSV(await f.text());
+      if(!trades)throw new Error('CSVを読めませんでした。KURAMAシリーズEAが出力する取引CSV（OpenTime/CloseTime列を含むもの）をご利用ください。');
+    }else if(/\.xlsx$/i.test(f.name)){
+      trades=await parseXLSX(await f.arrayBuffer());
+    }else{
+      trades=parseMTReport(await f.text());
+      if(!trades)throw new Error('レポートから取引を検出できませんでした。MT5は口座履歴→右クリック→レポート、MT4は口座履歴→右クリック→「レポートの保存(詳細)」で出力したHTMLをご利用ください。');
+    }
+    trades.sort((a,b)=>a.close-b.close);
+    ALL=trades;
+    start();
+  }catch(e){showErr('読み込みエラー: '+e.message);}
+}
+function start(){
+  buildSymFilter();
+  $('drop').style.display='none';
+  $('bar').style.display='flex';
+  $('dash').style.display='block';
+  applyFilter();
+}
+
+/* ================= フィルタ ================= */
+function buildSymFilter(){
+  const sel=$('fSym');sel.innerHTML='<option value="">すべて</option>';
+  [...new Set(ALL.map(t=>t.sym))].sort().forEach(s=>{
+    const o=document.createElement('option');o.value=s;o.textContent=s;sel.appendChild(o);
+  });
+}
+function applyFilter(){
+  const sym=$('fSym').value, r=$('fRange').value, dir=$('fDir').value;
+  let from=null;const now=new Date();
+  if(r==='ytd')from=new Date(now.getFullYear(),0,1);
+  if(r==='6m')from=new Date(now.getFullYear(),now.getMonth()-6,now.getDate());
+  if(r==='3m')from=new Date(now.getFullYear(),now.getMonth()-3,now.getDate());
+  if(r==='1m')from=new Date(now.getFullYear(),now.getMonth()-1,now.getDate());
+  VIEW=ALL.filter(t=>(!sym||t.sym===sym)&&(!from||t.close>=from)&&(!dir||String(t.dir)===dir));
+  render();
+}
+
+/* ================= 集計 ================= */
+function stats(list){
+  const wins=list.filter(t=>t.net>0), losses=list.filter(t=>t.net<0);
+  const gw=wins.reduce((s,t)=>s+t.net,0), gl=Math.abs(losses.reduce((s,t)=>s+t.net,0));
+  let cum=0,peak=0,dd=0;const curve=[];
+  let ws=0,ls=0,maxW=0,maxL=0;
+  list.forEach(t=>{
+    cum+=t.net;curve.push({d:t.close,v:cum,net:t.net});
+    peak=Math.max(peak,cum);dd=Math.max(dd,peak-cum);
+    if(t.net>0){ws++;ls=0;}else if(t.net<0){ls++;ws=0;}
+    maxW=Math.max(maxW,ws);maxL=Math.max(maxL,ls);
+  });
+  return {n:list.length,net:cum,wins:wins.length,losses:losses.length,
+    wr:list.length?wins.length/list.length*100:0,
+    pf:gl>0?gw/gl:(gw>0?Infinity:0),
+    avgW:wins.length?gw/wins.length:0, avgL:losses.length?gl/losses.length:0,
+    best:list.length?Math.max(...list.map(t=>t.net)):0,
+    worst:list.length?Math.min(...list.map(t=>t.net)):0,
+    maxW,maxL,dd,curve};
+}
+
+/* ================= 描画メイン ================= */
+function render(){
+  const s=stats(VIEW);
+  countUp($('kNet'),s.net,v=>signed(v),'val '+(s.net>=0?'pos':'neg'));
+  $('kPeriod').textContent=VIEW.length?
+    `${VIEW[0].close.toLocaleDateString('ja-JP')} 〜 ${VIEW[VIEW.length-1].close.toLocaleDateString('ja-JP')}　${VIEW.length}取引`:'データなし';
+  countUp($('kWr'),s.wr,v=>fmt(v,1)+'%');
+  $('kWl').textContent=`${s.wins}勝 ${s.losses}敗`;
+  $('kPf').textContent=s.pf===Infinity?'∞':fmt(s.pf,2);
+  countUp($('kDd'),s.dd,v=>fmt(v));
+  countUp($('kN'),s.n,v=>fmt(Math.round(v)));
+  $('kAvg').textContent=`平均勝ち ${signed(s.avgW)} / 平均負け -${fmt(s.avgL)}`;
+  const ev=s.n?s.net/s.n:0;
+  countUp($('kEv'),ev,v=>signed(v));
+  $('kStreak').innerHTML=`<span class="pos">${s.maxW}</span> / <span class="neg">${s.maxL}</span>`;
+  $('kBig').textContent=`最大勝ち ${signed(s.best)} / 最大負け ${signed(s.worst)}`;
+  drawSpark(s.curve);
+  drawCurve(s.curve);
+  drawMonthly();drawWeekday();drawHour();drawHist();drawDur();drawVs();drawSymTable();
+}
+
+/* ---- canvas共通 ---- */
+const HITS={};   // id -> [{x0,x1,y0,y1,label}]
+function ctx2d(id,h){
+  const c=$(id),dpr=window.devicePixelRatio||1,w=c.clientWidth;
+  c.width=w*dpr;c.height=h*dpr;c.style.height=h+'px';
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);
+  x.clearRect(0,0,w,h);HITS[id]=[];return {x,w,h};
+}
+function attachTip(id){
+  const c=$(id),tip=$('tip');
+  c.addEventListener('mousemove',e=>{
+    const r=c.getBoundingClientRect();
+    const mx=e.clientX-r.left,my=e.clientY-r.top;
+    const hit=(HITS[id]||[]).find(z=>mx>=z.x0&&mx<=z.x1&&my>=z.y0&&my<=z.y1);
+    if(hit){tip.innerHTML=hit.label;tip.style.display='block';
+      tip.style.left=Math.min(e.clientX+14,innerWidth-180)+'px';
+      tip.style.top=(e.clientY+14)+'px';}
+    else tip.style.display='none';
+  });
+  c.addEventListener('mouseleave',()=>tip.style.display='none');
+}
+
+/* ---- ヒーロー内スパークライン ---- */
+function drawSpark(curve){
+  const {x,w,h}=ctx2d('cSpark',110);
+  if(curve.length<2)return;
+  const vs=curve.map(p=>p.v),min=Math.min(...vs,0),max=Math.max(...vs,0),span=(max-min)||1;
+  const X=i=>w*i/(curve.length-1), Y=v=>8+(h-16)*(1-(v-min)/span);
+  x.beginPath();curve.forEach((p,i)=>i?x.lineTo(X(i),Y(p.v)):x.moveTo(X(i),Y(p.v)));
+  x.strokeStyle=css('--gold');x.lineWidth=1.5;x.shadowColor=css('--gold');x.shadowBlur=8;x.stroke();
+}
+
+/* ---- 累積カーブ(DD網掛け+ピーク+ツールチップ) ---- */
+function drawCurve(curve){
+  const {x,w,h}=ctx2d('cCurve',320);
+  if(curve.length<2){x.fillStyle=css('--muted');x.font='13px sans-serif';x.fillText('データが2件未満です',20,40);return;}
+  const P={l:74,r:16,t:14,b:28};
+  const vs=curve.map(p=>p.v).concat([0]);
+  const min=Math.min(...vs),max=Math.max(...vs),span=(max-min)||1;
+  const X=i=>P.l+(w-P.l-P.r)*i/(curve.length-1);
+  const Y=v=>P.t+(h-P.t-P.b)*(1-(v-min)/span);
+  x.strokeStyle='#1c1c24';x.fillStyle=css('--muted');x.font='11px '+css('--num');
+  for(let g=0;g<=4;g++){const v=min+span*g/4,y=Y(v);
+    x.beginPath();x.moveTo(P.l,y);x.lineTo(w-P.r,y);x.stroke();x.fillText(fmt(v),6,y+4);}
+  if(min<0&&max>0){x.strokeStyle='#3a3a46';x.setLineDash([4,4]);
+    x.beginPath();x.moveTo(P.l,Y(0));x.lineTo(w-P.r,Y(0));x.stroke();x.setLineDash([]);}
+  // DD網掛け: ランニングピークと実線の間を赤く
+  let peak=curve[0].v;
+  x.beginPath();x.moveTo(X(0),Y(peak));
+  curve.forEach((p,i)=>{peak=Math.max(peak,p.v);x.lineTo(X(i),Y(peak));});
+  for(let i=curve.length-1;i>=0;i--)x.lineTo(X(i),Y(curve[i].v));
+  x.closePath();x.fillStyle='rgba(255,85,102,.10)';x.fill();
+  // 塗り(ゼロ基準)
+  const last=curve[curve.length-1].v;
+  const grad=x.createLinearGradient(0,P.t,0,h-P.b);
+  grad.addColorStop(0,last>=0?'rgba(34,221,136,.22)':'rgba(255,85,102,.22)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  x.beginPath();x.moveTo(X(0),Y(0));
+  curve.forEach((p,i)=>x.lineTo(X(i),Y(p.v)));
+  x.lineTo(X(curve.length-1),Y(0));x.closePath();x.fillStyle=grad;x.fill();
+  // ライン
+  x.beginPath();curve.forEach((p,i)=>i?x.lineTo(X(i),Y(p.v)):x.moveTo(X(i),Y(p.v)));
+  x.strokeStyle=css('--gold');x.lineWidth=2;x.shadowColor=css('--gold');x.shadowBlur=10;x.stroke();
+  x.shadowBlur=0;
+  // ピークマーカー
+  let pk=0;curve.forEach((p,i)=>{if(p.v>curve[pk].v)pk=i;});
+  x.beginPath();x.arc(X(pk),Y(curve[pk].v),3.5,0,7);x.fillStyle=css('--gold');x.fill();
+  x.fillStyle=css('--muted');x.font='10px '+css('--num');
+  x.fillText('PEAK '+fmt(curve[pk].v),Math.min(X(pk)+6,w-110),Y(curve[pk].v)-6);
+  // 終点
+  const col=last>=0?css('--win'):css('--loss');
+  x.beginPath();x.arc(X(curve.length-1),Y(last),4,0,7);x.fillStyle=col;
+  x.shadowColor=col;x.shadowBlur=12;x.fill();x.shadowBlur=0;
+  // 日付目盛
+  x.fillStyle=css('--muted');x.font='11px '+css('--num');
+  [0,Math.floor((curve.length-1)/2),curve.length-1].forEach(i=>{
+    const t=curve[i].d.toLocaleDateString('ja-JP');
+    x.fillText(t,Math.min(Math.max(X(i)-30,P.l),w-P.r-70),h-8);});
+  // ヒットゾーン(縦帯)
+  curve.forEach((p,i)=>{
+    const x0=i===0?P.l:(X(i-1)+X(i))/2, x1=i===curve.length-1?w-P.r:(X(i)+X(i+1))/2;
+    HITS['cCurve'].push({x0,x1,y0:P.t,y1:h-P.b,
+      label:`<b>${p.d.toLocaleDateString('ja-JP')}</b><br>累積 ${signed(p.v)}<br>この取引 ${signed(p.net)}`});
+  });
+}
+
+/* ---- 汎用バー ---- */
+function drawBars(id,labels,vals,h,tipFmt){
+  const {x,w}=ctx2d(id,h);
+  if(!labels.length)return;
+  const P={l:66,r:12,t:12,b:26};
+  const min=Math.min(0,...vals),max=Math.max(0,...vals),span=(max-min)||1;
+  const Y=v=>P.t+(h-P.t-P.b)*(1-(v-min)/span);
+  x.strokeStyle='#1c1c24';x.fillStyle=css('--muted');x.font='10px '+css('--num');
+  for(let g=0;g<=3;g++){const v=min+span*g/3,y=Y(v);
+    x.beginPath();x.moveTo(P.l,y);x.lineTo(w-P.r,y);x.stroke();x.fillText(fmt(v),4,y+4);}
+  const bw=Math.min(44,(w-P.l-P.r)/labels.length*0.62);
+  labels.forEach((lb,i)=>{
+    const cx=P.l+(w-P.l-P.r)*(i+0.5)/labels.length;
+    const v=vals[i],col=v>=0?css('--win'):css('--loss');
+    x.fillStyle=col;x.shadowColor=col;x.shadowBlur=8;
+    x.fillRect(cx-bw/2,Math.min(Y(0),Y(v)),bw,Math.abs(Y(v)-Y(0))||1);
+    x.shadowBlur=0;
+    x.fillStyle=css('--muted');x.font='10px '+css('--jp');
+    const tw=x.measureText(lb).width;
+    if(tw<(w-P.l-P.r)/labels.length)x.fillText(lb,cx-tw/2,h-8);
+    HITS[id].push({x0:cx-bw/2-3,x1:cx+bw/2+3,y0:P.t,y1:h-P.b,
+      label:tipFmt?tipFmt(lb,v,i):`<b>${lb}</b><br>${signed(v)}`});
+  });
+}
+function groupSum(keyFn,list){
+  const m=new Map();
+  (list||VIEW).forEach(t=>{const k=keyFn(t);m.set(k,(m.get(k)||0)+t.net);});
+  return m;
+}
+function drawMonthly(){
+  const m=groupSum(t=>`${t.close.getFullYear()}/${String(t.close.getMonth()+1).padStart(2,'0')}`);
+  const keys=[...m.keys()].sort();
+  drawBars('cMonth',keys,keys.map(k=>m.get(k)),230);
+}
+function drawWeekday(){
+  const names=['日','月','火','水','木','金','土'];
+  const m=groupSum(t=>t.close.getDay());
+  const keys=[1,2,3,4,5].concat((m.get(0)||m.get(6))?[6,0]:[]);
+  drawBars('cWday',keys.map(k=>names[k]),keys.map(k=>m.get(k)||0),230);
+}
+function drawHour(){
+  const m=groupSum(t=>Math.floor(t.open.getHours()/3)*3);
+  const keys=[0,3,6,9,12,15,18,21].filter(k=>m.has(k));
+  drawBars('cHour',keys.map(k=>`${k}-${k+3}時`),keys.map(k=>m.get(k)||0),230);
+}
+function drawHist(){
+  if(!VIEW.length){ctx2d('cHist',230);return;}
+  const nets=VIEW.map(t=>t.net);
+  const lim=Math.max(Math.abs(Math.min(...nets)),Math.abs(Math.max(...nets)))||1;
+  const B=9,bw=2*lim/B;                    // 対称9バケット
+  const buckets=new Array(B).fill(0);
+  nets.forEach(v=>{let i=Math.floor((v+lim)/bw);i=Math.max(0,Math.min(B-1,i));buckets[i]++;});
+  const labels=buckets.map((_,i)=>{
+    const lo=-lim+i*bw;return fmt(lo/1000,0)+'k';});
+  const {x,w}=ctx2d('cHist',230);
+  const P={l:40,r:12,t:12,b:26},h=230;
+  const max=Math.max(...buckets)||1;
+  const Y=v=>P.t+(h-P.t-P.b)*(1-v/max);
+  x.strokeStyle='#1c1c24';x.fillStyle=css('--muted');x.font='10px '+css('--num');
+  for(let g=0;g<=3;g++){const v=max*g/3,y=Y(v);
+    x.beginPath();x.moveTo(P.l,y);x.lineTo(w-P.r,y);x.stroke();x.fillText(fmt(Math.round(v)),8,y+4);}
+  const cw=(w-P.l-P.r)/B;
+  buckets.forEach((n,i)=>{
+    const lo=-lim+i*bw,hi=lo+bw,mid=(lo+hi)/2;
+    const col=mid>=0?css('--win'):css('--loss');
+    const cx=P.l+cw*(i+0.5);
+    x.fillStyle=col;x.shadowColor=col;x.shadowBlur=6;
+    x.fillRect(cx-cw*0.36,Y(n),cw*0.72,(h-P.b)-Y(n)||0);
+    x.shadowBlur=0;
+    x.fillStyle=css('--muted');x.font='9px '+css('--num');
+    const lb=labels[i],tw=x.measureText(lb).width;
+    if(i%2===0)x.fillText(lb,cx-tw/2,h-8);
+    HITS['cHist'].push({x0:cx-cw/2,x1:cx+cw/2,y0:P.t,y1:h-P.b,
+      label:`<b>${fmt(lo)} 〜 ${fmt(hi)}</b><br>${n}回`});
+  });
+}
+function drawDur(){
+  const B=[["〜1h",1],["1-4h",4],["4-12h",12],["12-24h",24],["1-3日",72],["3日〜",1e9]];
+  const m=new Map();
+  VIEW.forEach(t=>{
+    const hrs=(t.close-t.open)/3600000;
+    const k=B.find(b=>hrs<=b[1])[0];
+    m.set(k,(m.get(k)||0)+t.net);
+  });
+  const keys=B.map(b=>b[0]).filter(k=>m.has(k));
+  drawBars('cDur',keys,keys.map(k=>m.get(k)),230);
+}
+function drawVs(){
+  const mk=(list,elN,elD,posCol)=>{
+    const s=stats(list);
+    const n=$(elN);n.textContent=signed(s.net);n.className='n '+(s.net>=0?'pos':'neg');
+    $(elD).textContent=list.length?
+      `${s.n}回 / 勝率 ${fmt(s.wr,1)}% / PF ${s.pf===Infinity?'∞':fmt(s.pf,2)}`:'取引なし';
+  };
+  mk(VIEW.filter(t=>t.dir===1),'vBuyNet','vBuyD');
+  mk(VIEW.filter(t=>t.dir===-1),'vSellNet','vSellD');
+}
+function drawSymTable(){
+  const tb=$('tSym');tb.innerHTML='';
+  [...new Set(VIEW.map(t=>t.sym))].sort().forEach(s=>{
+    const st=stats(VIEW.filter(t=>t.sym===s));
+    const rr=st.avgL>0?fmt(st.avgW/st.avgL,2):'-';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${s}</td><td>${st.n}</td><td>${fmt(st.wr,1)}%</td>
+      <td>${st.pf===Infinity?'∞':fmt(st.pf,2)}</td><td>${rr}</td>
+      <td class="${st.net>=0?'pos':'neg'}">${signed(st.net)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ================= デモデータ ================= */
+function demo(){
+  const out=[];let d=new Date();d.setMonth(d.getMonth()-6);
+  const syms=['GOLD#','USDJPY#'];
+  for(let i=0;i<110;i++){
+    d=new Date(d.getTime()+(5+Math.random()*16)*3600*1000);
+    if(d.getDay()===0||d.getDay()===6)continue;
+    const win=Math.random()<0.58;
+    const base=8000+Math.random()*9000;
+    out.push({open:new Date(d.getTime()-3600*1000*(1+Math.random()*30)),close:new Date(d),
+      sym:syms[Math.random()<0.7?0:1],dir:Math.random()<0.5?1:-1,
+      lot:0.1,net:Math.round(win?base:-base*0.75)});
+  }
+  ALL=out.sort((a,b)=>a.close-b.close);
+  start();
+}
+
+/* ================= イベント ================= */
+const drop=$('drop');
+drop.addEventListener('click',e=>{if(e.target.tagName!=='BUTTON'&&!e.target.closest('details'))$('file').click();});
+drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')$('file').click();});
+$('pick').addEventListener('click',()=>$('file').click());
+$('demo').addEventListener('click',demo);
+$('file').addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0]);});
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+$('fSym').addEventListener('change',applyFilter);
+$('fRange').addEventListener('change',applyFilter);
+$('fDir').addEventListener('change',applyFilter);
+$('reset').addEventListener('click',()=>{ALL=[];$('dash').style.display='none';$('bar').style.display='none';$('drop').style.display='block';$('file').value='';});
+['cCurve','cMonth','cWday','cHour','cHist','cDur'].forEach(attachTip);
+window.addEventListener('resize',()=>{if(VIEW.length)render();});
+</script>
+</body>
+</html>
